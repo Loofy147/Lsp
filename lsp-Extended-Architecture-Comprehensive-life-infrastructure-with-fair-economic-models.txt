@@ -1,0 +1,510 @@
+"""
+Learning Social Platform - Extended Architecture
+Comprehensive life infrastructure with fair economic models
+"""
+
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Set, Tuple
+from datetime import datetime, timedelta
+from enum import Enum
+import numpy as np
+
+
+# ============================================================================
+# ECONOMIC SYSTEM - Fair revenue generation and distribution
+# ============================================================================
+
+class RevenueStream(Enum):
+    """Different ways the platform generates revenue"""
+    CONTEXTUAL_ADVERTISING = "contextual_advertising"
+    FREELANCE_COMMISSION = "freelance_commission"
+    BUSINESS_SUBSCRIPTIONS = "business_subscriptions"
+    CREDENTIAL_VERIFICATION = "credential_verification"
+    PREMIUM_FEATURES = "premium_features"
+    MARKETPLACE_FEES = "marketplace_fees"
+    EVENT_BOOKING_FEES = "event_booking_fees"
+
+
+@dataclass
+class RevenueAllocation:
+    """
+    How revenue from each stream is allocated between platform and users.
+    These allocations should be transparent and fair.
+    """
+    stream: RevenueStream
+    
+    # Platform operational costs and development
+    platform_percentage: float  # e.g., 40%
+    
+    # Direct contributors (e.g., freelancers who earned the money)
+    direct_contributor_percentage: float  # e.g., 40%
+    
+    # Indirect contributors (users who make platform valuable)
+    indirect_contributor_pool_percentage: float  # e.g., 20%
+    
+    # Distribution period (how often revenue is distributed)
+    distribution_period: str = "monthly"
+
+
+@dataclass
+class ContributionScore:
+    """
+    Multi-dimensional measure of how a user creates value for the ecosystem.
+    This determines their share of indirect revenue pools.
+    """
+    user_id: str
+    period: str  # e.g., "2024-03"
+    
+    # Direct value creation
+    paid_work_completed: float = 0.0
+    services_provided: float = 0.0
+    content_created: float = 0.0
+    
+    # Indirect value creation
+    behavioral_data_quality: float = 0.0  # How valuable their engagement data is
+    peer_rating_accuracy: float = 0.0  # How helpful their ratings are
+    mentorship_impact: float = 0.0  # Value they add by helping others
+    community_health_contribution: float = 0.0  # Positive social impact
+    
+    # Platform improvement
+    feedback_quality: float = 0.0  # Useful feedback provided
+    bug_reports: float = 0.0
+    feature_suggestions_adopted: float = 0.0
+    
+    # Computed aggregate score
+    total_contribution: float = 0.0
+
+
+class RevenueDistributionEngine:
+    """
+    Calculates fair distribution of revenue to users based on contribution.
+    Transparent, auditable, and aligned with value creation.
+    """
+    
+    def __init__(self):
+        self.allocations: Dict[RevenueStream, RevenueAllocation] = {}
+        self.contribution_calculator = ContributionCalculator()
+        
+    def calculate_period_distribution(self, 
+                                     period: str,
+                                     revenue_by_stream: Dict[RevenueStream, float],
+                                     all_users: List['InternalProfile']) -> Dict[str, float]:
+        """
+        Calculate how much each user should receive for this period.
+        """
+        user_earnings = {}
+        
+        # For each revenue stream, distribute according to allocation rules
+        for stream, revenue in revenue_by_stream.items():
+            allocation = self.allocations[stream]
+            
+            # Platform keeps its percentage
+            platform_share = revenue * allocation.platform_percentage
+            
+            # Direct contributor percentage (if applicable)
+            direct_share = revenue * allocation.direct_contributor_percentage
+            direct_earnings = self._distribute_direct_contributions(
+                stream, direct_share, period
+            )
+            
+            # Indirect contributor pool
+            indirect_share = revenue * allocation.indirect_contributor_pool_percentage
+            indirect_earnings = self._distribute_indirect_contributions(
+                indirect_share, all_users, period
+            )
+            
+            # Combine earnings from this stream
+            for user_id, amount in {**direct_earnings, **indirect_earnings}.items():
+                user_earnings[user_id] = user_earnings.get(user_id, 0.0) + amount
+        
+        return user_earnings
+    
+    def _distribute_direct_contributions(self,
+                                        stream: RevenueStream,
+                                        pool: float,
+                                        period: str) -> Dict[str, float]:
+        """
+        Distribute direct contribution share to those who created direct value.
+        For freelance work, this goes to the workers.
+        For ads, this goes to content creators whose content was viewed.
+        """
+        if stream == RevenueStream.FREELANCE_COMMISSION:
+            # Get all completed work in this period
+            completed_work = self._get_completed_work(period)
+            
+            # Distribute proportionally to work value
+            total_value = sum(work.payment for work in completed_work)
+            
+            earnings = {}
+            for work in completed_work:
+                user_id = work.worker_id
+                # Their share is proportional to their work's value
+                share = (work.payment / total_value) * pool
+                earnings[user_id] = earnings.get(user_id, 0.0) + share
+            
+            return earnings
+        
+        elif stream == RevenueStream.CONTEXTUAL_ADVERTISING:
+            # Distribute to users whose profiles were used for targeting
+            # and users who viewed ads that converted
+            targeted_users = self._get_ad_targeted_users(period)
+            
+            # Weight by engagement and conversion
+            earnings = {}
+            total_weight = sum(u.ad_value_weight for u in targeted_users)
+            
+            for user_data in targeted_users:
+                share = (user_data.ad_value_weight / total_weight) * pool
+                earnings[user_data.user_id] = share
+            
+            return earnings
+        
+        # Other revenue streams have their own distribution logic
+        return {}
+    
+    def _distribute_indirect_contributions(self,
+                                          pool: float,
+                                          all_users: List['InternalProfile'],
+                                          period: str) -> Dict[str, float]:
+        """
+        Distribute indirect contribution pool based on contribution scores.
+        This rewards users who make the platform better for everyone.
+        """
+        # Calculate contribution score for each user in this period
+        contribution_scores = {}
+        for user in all_users:
+            score = self.contribution_calculator.calculate_score(user, period)
+            contribution_scores[user.user_id] = score
+        
+        # Distribute proportionally to contribution
+        total_contribution = sum(s.total_contribution for s in contribution_scores.values())
+        
+        if total_contribution == 0:
+            return {}  # No contributions this period
+        
+        earnings = {}
+        for user_id, score in contribution_scores.items():
+            share = (score.total_contribution / total_contribution) * pool
+            earnings[user_id] = share
+        
+        return earnings
+
+
+class ContributionCalculator:
+    """
+    Calculates how much value each user creates for the ecosystem.
+    This is complex because value comes in many forms.
+    """
+    
+    def calculate_score(self, 
+                       user: 'InternalProfile', 
+                       period: str) -> ContributionScore:
+        """
+        Comprehensive assessment of user's value contribution.
+        """
+        score = ContributionScore(user_id=user.user_id, period=period)
+        
+        # Direct value - work they completed
+        score.paid_work_completed = self._calculate_work_value(user, period)
+        score.services_provided = self._calculate_service_value(user, period)
+        score.content_created = self._calculate_content_value(user, period)
+        
+        # Indirect value - behavioral data quality
+        # Users who engage deeply across diverse activities generate
+        # more valuable training data for the algorithm
+        score.behavioral_data_quality = self._assess_data_quality(user, period)
+        
+        # Peer rating accuracy - how helpful are their ratings?
+        # Compare their ratings to outcomes and consensus
+        score.peer_rating_accuracy = self._assess_rating_quality(user, period)
+        
+        # Mentorship impact - did people they helped improve?
+        # Track learners they mentored and measure their progress
+        score.mentorship_impact = self._assess_mentorship_impact(user, period)
+        
+        # Community health - positive social interactions
+        # Do they help create a welcoming, productive environment?
+        score.community_health_contribution = self._assess_social_impact(user, period)
+        
+        # Platform improvement through feedback
+        score.feedback_quality = self._assess_feedback_value(user, period)
+        
+        # Aggregate into total contribution score
+        score.total_contribution = self._aggregate_contributions(score)
+        
+        return score
+    
+    def _calculate_work_value(self, user: 'InternalProfile', period: str) -> float:
+        """
+        Value from paid work completed.
+        Not just the dollar amount, but also considering quality and impact.
+        """
+        completed_projects = self._get_user_projects(user.user_id, period)
+        
+        value = 0.0
+        for project in completed_projects:
+            # Base value from payment
+            base_value = project.payment_amount
+            
+            # Multiply by quality factors
+            quality_multiplier = 1.0
+            
+            # Client satisfaction boosts value
+            if project.client_satisfaction:
+                quality_multiplier *= (0.5 + project.client_satisfaction)
+            
+            # Repeat business indicates quality
+            if project.is_repeat_client:
+                quality_multiplier *= 1.2
+            
+            # Complexity and skill required matters
+            quality_multiplier *= project.skill_complexity_factor
+            
+            value += base_value * quality_multiplier
+        
+        return value
+    
+    def _assess_data_quality(self, user: 'InternalProfile', period: str) -> float:
+        """
+        How valuable is the behavioral data this user generates?
+        
+        High-quality data comes from:
+        - Diverse engagement across multiple domains
+        - Genuine learning (showing growth over time)
+        - Consistent patterns (not erratic behavior)
+        - Rich context (using many platform features)
+        """
+        activities = self._get_user_activities(user.user_id, period)
+        
+        if not activities:
+            return 0.0
+        
+        # Diversity score - how many different domains?
+        domains_engaged = len(set(a.domain for a in activities))
+        diversity_score = min(domains_engaged / 5.0, 1.0)  # Max at 5 domains
+        
+        # Growth signal - are they improving?
+        growth_trajectories = self._extract_growth_signals(activities)
+        growth_score = np.mean([t.learning_velocity for t in growth_trajectories])
+        
+        # Consistency score - regular engagement
+        engagement_pattern = self._analyze_temporal_pattern(activities)
+        consistency_score = engagement_pattern.regularity
+        
+        # Richness score - using many features
+        features_used = self._count_features_used(activities)
+        richness_score = min(features_used / 10.0, 1.0)
+        
+        # Weighted combination
+        data_quality = (
+            diversity_score * 0.3 +
+            growth_score * 0.3 +
+            consistency_score * 0.2 +
+            richness_score * 0.2
+        )
+        
+        # Scale by volume (more high-quality data is more valuable)
+        volume_factor = min(len(activities) / 100.0, 2.0)
+        
+        return data_quality * volume_factor
+    
+    def _assess_mentorship_impact(self, user: 'InternalProfile', period: str) -> float:
+        """
+        Measure the value created by helping others learn.
+        Track mentees and measure their improvement.
+        """
+        mentoring_activities = self._get_mentoring_activities(user.user_id, period)
+        
+        total_impact = 0.0
+        for activity in mentoring_activities:
+            # Who did they help?
+            mentee_id = activity.mentee_id
+            
+            # What was the mentee's improvement after this help?
+            before_capability = self._get_capability_before(mentee_id, activity.timestamp)
+            after_capability = self._get_capability_after(mentee_id, activity.timestamp)
+            
+            # Improvement attributable to this mentorship
+            improvement = after_capability - before_capability
+            
+            # Weight by how much time they invested
+            time_investment = activity.duration_minutes
+            
+            # Impact is improvement per hour invested
+            impact = (improvement / (time_investment / 60.0)) * 10.0
+            
+            total_impact += impact
+        
+        return total_impact
+
+
+# ============================================================================
+# PORTFOLIO SYSTEM - Professional identity and opportunity matching
+# ============================================================================
+
+@dataclass
+class Portfolio:
+    """
+    A user's professional profile, dynamically constructed for different contexts.
+    The same underlying capabilities appear differently for different audiences.
+    """
+    user_id: str
+    
+    # Core identity
+    display_name: str
+    professional_headline: str
+    bio: str
+    
+    # Capability showcase - what they're good at
+    core_capabilities: Dict['CapabilityDimension', float]
+    domain_expertise: Dict['ActivityDomain', float]
+    
+    # Evidence - proof of capabilities
+    featured_projects: List['ProjectShowcase']
+    client_testimonials: List['Testimonial']
+    peer_endorsements: List['PeerEndorsement']
+    
+    # Credentials and achievements
+    verified_skills: List[str]
+    earned_badges: List['Badge']
+    certifications: List['Certification']
+    
+    # Availability and preferences
+    available_for_work: bool
+    preferred_project_types: List[str]
+    hourly_rate_range: Optional[Tuple[float, float]]
+    
+    # Trust and reliability
+    trust_score: float
+    completion_rate: float
+    average_client_satisfaction: float
+    response_time_percentile: float
+
+
+class PortfolioGenerator:
+    """
+    Dynamically generates optimal portfolio views for different contexts.
+    The algorithm learns what presentations work best.
+    """
+    
+    def generate_for_context(self,
+                            user: 'InternalProfile',
+                            context: 'PortfolioContext') -> Portfolio:
+        """
+        Create a portfolio optimized for a specific use case.
+        
+        Different contexts emphasize different aspects:
+        - Applying for freelance work: emphasize relevant experience
+        - Seeking collaborators: emphasize collaboration style
+        - Personal branding: emphasize unique combinations
+        - Job applications: emphasize credentials and achievements
+        """
+        
+        if context.type == 'freelance_application':
+            return self._generate_freelance_portfolio(user, context)
+        elif context.type == 'collaboration_seeking':
+            return self._generate_collaboration_portfolio(user, context)
+        elif context.type == 'professional_networking':
+            return self._generate_networking_portfolio(user, context)
+        elif context.type == 'personal_brand':
+            return self._generate_brand_portfolio(user, context)
+        
+        # Default comprehensive view
+        return self._generate_comprehensive_portfolio(user)
+    
+    def _generate_freelance_portfolio(self,
+                                     user: 'InternalProfile',
+                                     context: 'PortfolioContext') -> Portfolio:
+        """
+        Portfolio optimized for freelance opportunity.
+        Emphasize: relevant experience, reliability, quality of past work.
+        """
+        portfolio = Portfolio(user_id=user.user_id, display_name=user.preferences.display_name)
+        
+        # Get the specific skills needed for this opportunity
+        required_skills = context.opportunity_requirements
+        
+        # Filter and rank capabilities by relevance
+        relevant_capabilities = self._rank_capabilities_by_relevance(
+            user.capability_scores,
+            required_skills
+        )
+        portfolio.core_capabilities = relevant_capabilities
+        
+        # Select most relevant project examples
+        all_projects = self._get_user_projects(user.user_id)
+        relevant_projects = self._select_relevant_projects(
+            all_projects,
+            required_skills,
+            max_count=5
+        )
+        portfolio.featured_projects = [
+            self._create_project_showcase(p) for p in relevant_projects
+        ]
+        
+        # Include testimonials from similar work
+        relevant_testimonials = self._get_relevant_testimonials(
+            user.user_id,
+            required_skills
+        )
+        portfolio.client_testimonials = relevant_testimonials
+        
+        # Emphasize reliability metrics
+        portfolio.completion_rate = self._calculate_completion_rate(user)
+        portfolio.average_client_satisfaction = self._calculate_avg_satisfaction(user)
+        portfolio.response_time_percentile = self._calculate_response_percentile(user)
+        
+        return portfolio
+    
+    def optimize_portfolio_presentation(self,
+                                       portfolio: Portfolio,
+                                       historical_outcomes: List['PortfolioOutcome']):
+        """
+        Learn from past portfolio presentations what works best.
+        Use A/B testing and outcome tracking to improve over time.
+        """
+        # Analyze which portfolio elements correlate with positive outcomes
+        # (getting hired, successful collaborations, etc.)
+        
+        # For each element type (project showcase, testimonial, badge, etc.)
+        # learn what characteristics make them effective
+        
+        # Adjust future portfolio generation to emphasize effective elements
+        pass
+
+
+# ============================================================================
+# RELATIONSHIP SYSTEM - Multi-faceted human connections
+# ============================================================================
+
+class RelationshipType(Enum):
+    """Different kinds of relationships users form"""
+    LEARNING_PARTNERSHIP = "learning_partnership"
+    PROFESSIONAL_COLLABORATION = "professional_collaboration"
+    MENTORSHIP = "mentorship"
+    FRIENDSHIP = "friendship"
+    CREATIVE_COLLABORATION = "creative_collaboration"
+    RECREATIONAL_GROUP = "recreational_group"
+    BUSINESS_RELATIONSHIP = "business_relationship"
+
+
+@dataclass
+class Relationship:
+    """
+    A connection between users that can span multiple relationship types.
+    The platform tracks relationship health and helps nurture them.
+    """
+    relationship_id: str
+    participants: List[str]  # User IDs
+    
+    # What types of relationship is this?
+    relationship_types: Set[RelationshipType]
+    
+    # Relationship history and quality
+    initiated_date: datetime
+    last_interaction: datetime
+    interaction_frequency: float
+    relationship_quality_score: float
+    
+    # Shared activities and outcomes
+    collaborative_pro
