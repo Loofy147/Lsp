@@ -5,6 +5,7 @@ from .models import (
     CapabilityDimension,
     BehaviorPattern,
     RewardConcept,
+    ActivityDomain,
 )
 from typing import Dict, List, Tuple
 import numpy as np
@@ -46,13 +47,13 @@ class MultiDimensionalAssessor:
     """
 
     def __init__(self):
-        # Neural networks for each capability dimension
+        # Neural networks for each capability dimension (placeholders)
         self.dimension_models: Dict[CapabilityDimension, NeuralAssessor] = {}
 
-        # Cross-dimensional interaction models
+        # Cross-dimensional interaction models (placeholders)
         self.interaction_models: Dict[Tuple[CapabilityDimension, CapabilityDimension], InteractionModel] = {}
 
-        # Temporal models for tracking change over time
+        # Temporal models for tracking change over time (placeholders)
         self.temporal_models: Dict[CapabilityDimension, TemporalModel] = {}
 
     def assess_from_activity(
@@ -62,63 +63,92 @@ class MultiDimensionalAssessor:
         Extract capability signals from a single activity.
         Different activities reveal different dimensions with different confidence.
         """
-        assessments = {}
+        # Get a copy of the current scores to update
+        updated_scores = internal_profile.capability_scores.copy()
 
         # Each dimension model evaluates what this activity reveals
         for dimension in CapabilityDimension:
-            # Get the current understanding of this capability
-            current_estimate = internal_profile.capability_scores.get(dimension, 0.5)
+            current_estimate = updated_scores.get(dimension, 0.5)
 
             # Extract signals specific to this dimension from the activity
             signals = self._extract_dimension_signals(activity, dimension)
 
-            # Update estimate using Bayesian updating
-            new_estimate = self._bayesian_update(
-                current_estimate,
-                signals,
-                confidence=self._signal_confidence(activity, dimension)
-            )
-
-            assessments[dimension] = new_estimate
+            # Update estimate using Bayesian updating if signals are present
+            if signals:
+                confidence = self._signal_confidence(activity, dimension)
+                new_estimate = self._bayesian_update(current_estimate, signals, confidence)
+                updated_scores[dimension] = new_estimate
 
         # Consider interaction effects between dimensions
-        assessments = self._apply_interaction_effects(assessments, activity)
+        final_assessments = self._apply_interaction_effects(updated_scores, activity)
 
-        return assessments
+        return final_assessments
 
     def _extract_dimension_signals(
         self, activity: ActivityEvent, dimension: CapabilityDimension
     ) -> List[float]:
         """
-        Different activities provide different windows into capabilities.
-        This learns which aspects of each activity type are most informative.
+        Extracts capability signals from an activity's performance metrics.
+        This is a rule-based placeholder for a more sophisticated model.
         """
-        model = self.dimension_models.get(dimension)
-        if model:
-            return model.extract_signals(activity)
-        return []
+        signals = []
+        # Example rule: a score in a skill game is a signal for pattern recognition
+        if activity.domain == ActivityDomain.SKILL_GAMES:
+            if dimension == CapabilityDimension.PATTERN_RECOGNITION:
+                if 'score' in activity.performance_metrics:
+                    # Normalize score to be between 0 and 1
+                    signals.append(activity.performance_metrics['score'] / 100.0)
+            elif dimension == CapabilityDimension.ANALYTICAL_THINKING:
+                 if 'strategy_score' in activity.performance_metrics:
+                    signals.append(activity.performance_metrics['strategy_score'])
+
+        # Example rule: project quality is a signal for domain depth
+        elif activity.domain == ActivityDomain.FREELANCE_PROJECTS:
+            if dimension == CapabilityDimension.DOMAIN_DEPTH:
+                if 'quality_rating' in activity.performance_metrics:
+                    # Normalize 5-star rating to 0-1 scale
+                    signals.append(activity.performance_metrics['quality_rating'] / 5.0)
+            elif dimension == CapabilityDimension.RELIABILITY:
+                 if 'on_time_delivery' in activity.performance_metrics:
+                    signals.append(activity.performance_metrics['on_time_delivery'])
+
+        return signals
 
     def _signal_confidence(
         self, activity: ActivityEvent, dimension: CapabilityDimension
     ) -> float:
         """
-        Some activities strongly reveal certain capabilities, others weakly.
-        Learn these relationships from data.
+        Determines the confidence of a signal based on the activity type.
+        This is a rule-based placeholder for a more sophisticated model.
         """
-        # This would be a learned model in a real implementation
-        return 0.5
+        if activity.domain == ActivityDomain.SKILL_GAMES:
+            if dimension == CapabilityDimension.PATTERN_RECOGNITION:
+                return 0.9
+            elif dimension == CapabilityDimension.ANALYTICAL_THINKING:
+                return 0.7
+
+        elif activity.domain == ActivityDomain.FREELANCE_PROJECTS:
+            if dimension == CapabilityDimension.DOMAIN_DEPTH:
+                return 0.8
+            elif dimension == CapabilityDimension.RELIABILITY:
+                return 0.9
+
+        return 0.3 # Default low confidence
 
     def _bayesian_update(self, prior: float, signals: List[float], confidence: float) -> float:
         """
         Update capability estimate incorporating uncertainty.
+        A more sophisticated model could use variance or a full Bayesian update.
         """
         if not signals:
             return prior
 
-        # Simplistic update for now
+        # A simple linear interpolation for this placeholder implementation
         signal_mean = np.mean(signals)
         new_estimate = prior * (1 - confidence) + signal_mean * confidence
-        return new_estimate
+
+        # Clamp the value between 0.0 and 1.0
+        return max(0.0, min(1.0, new_estimate))
 
     def _apply_interaction_effects(
         self, assessments: Dict[CapabilityDimension, float], activity: ActivityEvent
@@ -136,16 +166,12 @@ class PatternDiscoveryEngine:
     """
 
     def __init__(self):
-        # Clustering algorithms for finding behavioral groupings
-        self.behavior_clusterer = BehaviorClusterer()
+        # Using a simple clustering algorithm for this implementation
+        from sklearn.cluster import KMeans
+        self.behavior_clusterer = KMeans(n_clusters=3, random_state=0, n_init=10) # 3 patterns for now
 
-        # Pattern extraction from clusters
         self.pattern_extractor = PatternExtractor()
-
-        # Pattern validation - do these patterns matter?
         self.pattern_validator = PatternValidator()
-
-        # Pattern evolution tracker
         self.pattern_history: Dict[str, List[PatternVersion]] = {}
 
     def discover_patterns(
@@ -154,22 +180,25 @@ class PatternDiscoveryEngine:
         """
         Find meaningful groupings of users based on multidimensional behavior.
         """
-        if not user_population:
+        if len(user_population) < self.behavior_clusterer.n_clusters:
             return []
 
         user_vectors = self._create_behavior_vectors(user_population)
 
         # Cluster to find natural groupings
-        clusters = self.behavior_clusterer.fit_predict(user_vectors)
+        cluster_labels = self.behavior_clusterer.fit_predict(user_vectors)
 
         # For each cluster, extract the defining pattern
         patterns = []
-        for cluster_id in set(clusters):
-            cluster_users = [u for u, c in zip(user_population, clusters) if c == cluster_id]
+        for i in range(self.behavior_clusterer.n_clusters):
+            cluster_users = [
+                user for user, label in zip(user_population, cluster_labels) if label == i
+            ]
+            if not cluster_users:
+                continue
 
-            pattern = self._extract_pattern_from_cluster(cluster_users)
+            pattern = self._extract_pattern_from_cluster(i, cluster_users)
 
-            # Validate that this pattern is meaningful and stable
             if self._validate_pattern(pattern, cluster_users):
                 patterns.append(pattern)
 
@@ -178,44 +207,64 @@ class PatternDiscoveryEngine:
     def _create_behavior_vectors(self, users: List[InternalProfile]) -> np.ndarray:
         """
         Transform rich user profiles into vectors for clustering.
-        This is a simplified placeholder.
+        This version includes capability scores and learning velocity.
         """
-        # A real implementation would be much more sophisticated
-        num_dimensions = len(CapabilityDimension)
-        vectors = np.zeros((len(users), num_dimensions))
+        num_capability_dims = len(CapabilityDimension)
+        # Add 1 for average learning velocity
+        num_features = num_capability_dims + 1
+
+        vectors = np.zeros((len(users), num_features))
 
         for i, user in enumerate(users):
+            # Add capability scores
             for j, dim in enumerate(CapabilityDimension):
                 vectors[i, j] = user.capability_scores.get(dim, 0.5)
+
+            # Add average learning velocity as a feature
+            if user.learning_curves:
+                avg_velocity = np.mean([lc.learning_velocity for lc in user.learning_curves.values()])
+                vectors[i, num_capability_dims] = avg_velocity
+            else:
+                vectors[i, num_capability_dims] = 0.0
 
         return vectors
 
     def _extract_pattern_from_cluster(
-        self, cluster_users: List[InternalProfile]
+        self, cluster_id: int, cluster_users: List[InternalProfile]
     ) -> BehaviorPattern:
         """
-        Find what makes this cluster distinctive. Placeholder.
+        Find what makes this cluster distinctive by averaging their features.
         """
-        # This would involve statistical analysis in a real implementation
+        # Calculate the centroid of the cluster's capability profiles
+        avg_capability_profile: Dict[CapabilityDimension, float] = {}
+        for dim in CapabilityDimension:
+            scores = [u.capability_scores.get(dim, 0.5) for u in cluster_users]
+            avg_capability_profile[dim] = np.mean(scores)
+
+        # A simple naming convention for the discovered pattern
+        pattern_name = f"Cluster {cluster_id} Archetype"
+        description = "Users with a similar profile of capabilities and learning styles."
+
         return BehaviorPattern(
-            pattern_id="placeholder_pattern",
-            pattern_name="Placeholder Pattern",
-            description="A pattern discovered by the engine.",
-            characteristic_behaviors=[],
-            capability_profile={},
-            temporal_signature={},
-            strength=0.0,
-            consistency=0.0,
-            triggering_contexts=[],
+            pattern_id=f"cluster_{cluster_id}",
+            pattern_name=pattern_name,
+            description=description,
+            characteristic_behaviors=[], # To be implemented
+            capability_profile=avg_capability_profile,
+            temporal_signature={}, # To be implemented
+            strength=1.0, # Placeholder
+            consistency=1.0, # Placeholder
+            triggering_contexts=[], # To be implemented
         )
 
     def _validate_pattern(
         self, pattern: BehaviorPattern, cluster_users: List[InternalProfile]
     ) -> bool:
         """
-        Is this pattern meaningful or just statistical noise? Placeholder.
+        Is this pattern meaningful or just statistical noise?
+        For now, we accept any pattern with more than one user.
         """
-        return True
+        return len(cluster_users) > 1
 
 class RewardSynthesizer:
     """
