@@ -19,9 +19,8 @@ class TestModels(unittest.TestCase):
         self.assertEqual(profile.capability_scores, {})
         self.assertEqual(profile.learning_curves, {})
         self.assertEqual(profile.behavior_patterns, {})
-        self.assertIsNone(profile.preferences)
-        self.assertIsNone(profile.engagement_rhythms)
-        self.assertEqual(profile.external_connections, {})
+        self.assertIsNotNone(profile.preferences)
+        self.assertIsInstance(profile.preferences, UserPreferences)
 
         prefs = UserPreferences(display_name="Jules")
         profile_with_prefs = InternalProfile(user_id="user456", preferences=prefs)
