@@ -268,73 +268,123 @@ class PatternDiscoveryEngine:
 
 class RewardSynthesizer:
     """
-    Creates new reward concepts based on discovered patterns.
-    This is where the algorithm becomes creative.
+    Creates new reward concepts based on discovered patterns and Self-Determination Theory.
     """
 
     def __init__(self):
         self.pattern_discovery = PatternDiscoveryEngine()
-        self.reward_generator = RewardGenerator()
-        self.reward_evaluator = RewardEvaluator()
-
-        # Library of existing reward concepts
         self.reward_library: Dict[str, RewardConcept] = {}
-        self.reward_threshold = 0.5 # Example threshold
+        self.reward_threshold = 0.5
 
     def synthesize_new_rewards(
-        self, discovered_patterns: List[BehaviorPattern], user_feedback: Dict[str, float]
+        self, discovered_patterns: List[BehaviorPattern], user_population: List[InternalProfile]
     ) -> List[RewardConcept]:
         """
-        For patterns that don't map to existing rewards, create new ones.
+        Generates new rewards based on discovered patterns and SDT principles.
         """
         new_rewards = []
 
         for pattern in discovered_patterns:
-            # Check if existing rewards cover this pattern
             if self._pattern_adequately_covered(pattern):
                 continue
 
-            # Generate candidate reward concepts
-            candidates = self._generate_reward_candidates(pattern)
+            # Generate SDT-based reward candidates
+            candidates = self._generate_sdt_reward_candidates(pattern, user_population)
 
-            # Evaluate which candidates would be most meaningful to users
             for candidate in candidates:
                 predicted_value = self._predict_reward_value(candidate, pattern)
 
                 if predicted_value > self.reward_threshold:
-                    # Refine the concept based on what we know works
-                    refined = self._refine_reward_concept(candidate, user_feedback)
-                    new_rewards.append(refined)
+                    new_rewards.append(candidate)
 
         return new_rewards
 
     def _pattern_adequately_covered(self, pattern: BehaviorPattern) -> bool:
-        """
-        Do existing rewards recognize this pattern sufficiently? Placeholder.
-        """
-        return False
+        """Checks if existing rewards sufficiently recognize a pattern."""
+        # In a real system, this would involve checking for semantic overlap
+        return pattern.pattern_id in self.reward_library
 
-    def _generate_reward_candidates(
-        self, pattern: BehaviorPattern
+    def _generate_sdt_reward_candidates(
+        self, pattern: BehaviorPattern, user_population: List[InternalProfile]
     ) -> List[RewardConcept]:
         """
-        Generate multiple possible ways to recognize this pattern. Placeholder.
+        Generates reward concepts based on SDT principles (Autonomy, Competence, Relatedness).
         """
-        # A real implementation would use generative models
-        return []
+        candidates = []
+
+        # Autonomy: Reward self-directed behavior
+        if pattern.capability_profile.get(CapabilityDimension.ADAPTABILITY, 0) > 0.7:
+             candidates.append(RewardConcept(
+                concept_id=f"autonomy_{pattern.pattern_id}",
+                concept_name="Self-Directed Learner",
+                concept_type="badge",
+                target_pattern=pattern,
+                value_to_users=0.8, # Assumed value
+                eligibility_model=None, # To be defined
+                delivery_mechanism="profile_badge",
+                social_visibility="public",
+                iterations=1,
+                user_feedback_score=0.0
+            ))
+
+        # Competence: Reward overcoming challenges and skill mastery
+        if pattern.capability_profile.get(CapabilityDimension.PERSISTENCE, 0) > 0.8:
+            candidates.append(RewardConcept(
+                concept_id=f"competence_{pattern.pattern_id}",
+                concept_name="Perseverance Award",
+                concept_type="recognition",
+                target_pattern=pattern,
+                value_to_users=0.85,
+                eligibility_model=None,
+                delivery_mechanism="timeline_highlight",
+                social_visibility="public",
+                iterations=1,
+                user_feedback_score=0.0
+            ))
+
+        # Relatedness: Reward collaboration and mentorship
+        if pattern.capability_profile.get(CapabilityDimension.COLLABORATION, 0) > 0.75:
+            candidates.append(RewardConcept(
+                concept_id=f"relatedness_{pattern.pattern_id}",
+                concept_name="Valued Collaborator",
+                concept_type="status",
+                target_pattern=pattern,
+                value_to_users=0.9,
+                eligibility_model=None,
+                delivery_mechanism="user_title",
+                social_visibility="public",
+                iterations=1,
+                user_feedback_score=0.0
+            ))
+
+        return candidates
 
     def _predict_reward_value(
         self, concept: RewardConcept, pattern: BehaviorPattern
     ) -> float:
-        """
-        How meaningful would this reward be? Placeholder.
-        """
-        return 0.75 # Assume high value for now
+        """Predicts how meaningful a reward would be to users with a given pattern."""
+        # Placeholder for a more complex predictive model
+        return concept.value_to_users
 
-    def _refine_reward_concept(
-        self, concept: RewardConcept, feedback: Dict[str, float]
-    ) -> RewardConcept:
+
+class EligibilityDeterminer:
+    """
+    Learns who should be eligible for which rewards and opportunities.
+    """
+
+    def __init__(self):
+        # Models for each reward type
+        self.eligibility_models: Dict[str, 'EligibilityModel'] = {}
+
+    def determine_eligibility(
+        self, user: InternalProfile, reward_concept: RewardConcept
+    ) -> bool:
         """
-        Polish the concept based on user preferences. Placeholder.
+        Determines if a user is eligible for a given reward concept.
+        This is a basic implementation based on capability thresholds.
         """
-        return concept
+        # A simple threshold-based model for now
+        for capability, required_score in reward_concept.target_pattern.capability_profile.items():
+            if user.capability_scores.get(capability, 0.0) < required_score * 0.8: # 80% threshold
+                return False
+        return True
