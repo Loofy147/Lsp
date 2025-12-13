@@ -1,176 +1,154 @@
 
-from dataclasses import dataclass, field
-from typing import Dict, List
-from enum import Enum
-from .models import InternalProfile, ActivityEvent, LearningCurve
+"""
+LSP Economic Modeling System
+- Provides a production-ready economic modeler to validate the platform's financial viability.
+- Replaces the original placeholder economic system.
+"""
+
+from typing import Dict
+from .models import EconomicScenario, EconomicProjection
 
 # ============================================================================
-# ECONOMIC SYSTEM - Fair revenue generation and distribution
+# ECONOMIC MODELING & VALIDATION
 # ============================================================================
 
-class RevenueStream(Enum):
-    """Different ways the platform generates revenue"""
-    CONTEXTUAL_ADVERTISING = "contextual_advertising"
-    FREELANCE_COMMISSION = "freelance_commission"
-    BUSINESS_SUBSCRIPTIONS = "business_subscriptions"
-    CREDENTIAL_VERIFICATION = "credential_verification"
-    PREMIUM_FEATURES = "premium_features"
-    MARKETPLACE_FEES = "marketplace_fees"
-    EVENT_BOOKING_FEES = "event_booking_fees"
-
-
-@dataclass
-class RevenueAllocation:
+class EconomicModeler:
     """
-    How revenue from each stream is allocated between platform and users.
-    These allocations should be transparent and fair.
+    Models platform economics under different scenarios.
+    Validates whether the revenue model is sustainable.
     """
-    stream: RevenueStream
-    platform_percentage: float
-    direct_contributor_percentage: float
-    indirect_contributor_pool_percentage: float
-    distribution_period: str = "monthly"
 
+    def __init__(
+        self,
+        fixed_costs_monthly: float = 50000,  # Servers, staff, etc.
+        platform_revenue_share: float = 0.4
+    ):
+        self.fixed_costs_monthly = fixed_costs_monthly
+        self.platform_revenue_share = platform_revenue_share
 
-@dataclass
-class ContributionScore:
-    """
-    Multi-dimensional measure of how a user creates value for the ecosystem.
-    This determines their share of indirect revenue pools.
-    """
-    user_id: str
-    period: str
-    paid_work_completed: float = 0.0
-    services_provided: float = 0.0
-    content_created: float = 0.0
-    behavioral_data_quality: float = 0.0
-    peer_rating_accuracy: float = 0.0
-    mentorship_impact: float = 0.0
-    community_health_contribution: float = 0.0
-    feedback_quality: float = 0.0
-    bug_reports: float = 0.0
-    feature_suggestions_adopted: float = 0.0
-    total_contribution: float = 0.0
-
-# Placeholder classes for data structures that would be defined elsewhere
-@dataclass
-class CompletedWork:
-    worker_id: str
-    payment: float
-
-@dataclass
-class AdTargetedUser:
-    user_id: str
-    ad_value_weight: float
-
-@dataclass
-class Project:
-    payment_amount: float
-    client_satisfaction: float
-    is_repeat_client: bool
-    skill_complexity_factor: float
-
-@dataclass
-class MentoringActivity:
-    mentee_id: str
-    timestamp: str
-    duration_minutes: int
-
-class ContributionCalculator:
-    """
-    Calculates how much value each user creates for the ecosystem.
-    """
-    def calculate_score(self, user: InternalProfile, period: str) -> ContributionScore:
+    def project_economics(
+        self,
+        scenario: EconomicScenario
+    ) -> EconomicProjection:
         """
-        Comprehensive assessment of user's value contribution.
+        Project economics for a given scenario.
+        Returns a detailed breakdown and viability assessment.
         """
-        score = ContributionScore(user_id=user.user_id, period=period)
+        # 1. Advertising Revenue
+        active_ad_viewers = scenario.monthly_active_users * (1 - scenario.ad_opt_out_rate)
+        ad_impressions = active_ad_viewers * scenario.ad_views_per_active_user_monthly
+        ad_revenue = (ad_impressions / 1000) * scenario.ad_cpm
 
-        score.paid_work_completed = self._calculate_work_value(user, period)
-        score.services_provided = self._calculate_service_value(user, period)
-        score.content_created = self._calculate_content_value(user, period)
-        score.behavioral_data_quality = self._assess_data_quality(user, period)
-        score.peer_rating_accuracy = self._assess_rating_quality(user, period)
-        score.mentorship_impact = self._assess_mentorship_impact(user, period)
-        score.community_health_contribution = self._assess_social_impact(user, period)
-        score.feedback_quality = self._assess_feedback_value(user, period)
-        score.total_contribution = self._aggregate_contributions(score)
+        # 2. Freelance Commission
+        freelance_revenue = (
+            scenario.avg_monthly_freelance_transactions *
+            scenario.avg_transaction_value *
+            scenario.platform_commission_rate
+        )
 
-        return score
+        # 3. Premium Subscriptions
+        premium_subscribers = int(scenario.monthly_active_users * scenario.premium_subscription_rate)
+        premium_revenue = premium_subscribers * scenario.premium_monthly_price
 
-    # Placeholder methods for functionality that would be built out
-    def _calculate_work_value(self, user: InternalProfile, period: str) -> float: return 0.0
-    def _calculate_service_value(self, user: InternalProfile, period: str) -> float: return 0.0
-    def _calculate_content_value(self, user: InternalProfile, period: str) -> float: return 0.0
-    def _assess_data_quality(self, user: InternalProfile, period: str) -> float: return 0.0
-    def _assess_rating_quality(self, user: InternalProfile, period: str) -> float: return 0.0
-    def _assess_mentorship_impact(self, user: InternalProfile, period: str) -> float: return 0.0
-    def _assess_social_impact(self, user: InternalProfile, period: str) -> float: return 0.0
-    def _assess_feedback_value(self, user: InternalProfile, period: str) -> float: return 0.0
-    def _aggregate_contributions(self, score: ContributionScore) -> float:
-        return sum([
-            score.paid_work_completed, score.services_provided, score.content_created,
-            score.behavioral_data_quality, score.peer_rating_accuracy, score.mentorship_impact,
-            score.community_health_contribution, score.feedback_quality
-        ])
+        # 4. Business Subscriptions
+        business_revenue = scenario.business_subscribers * scenario.business_subscription_monthly
 
-class RevenueDistributionEngine:
-    """
-    Calculates fair distribution of revenue to users based on contribution.
-    """
-    def __init__(self):
-        self.allocations: Dict[RevenueStream, RevenueAllocation] = {}
-        self.contribution_calculator = ContributionCalculator()
+        # 5. Credential Verifications
+        credential_revenue = scenario.credential_verifications_monthly * scenario.verification_fee
 
-    def calculate_period_distribution(
-        self, period: str, revenue_by_stream: Dict[RevenueStream, float], all_users: List[InternalProfile]
-    ) -> Dict[str, float]:
+        # Total Revenue
+        total_revenue = (
+            ad_revenue + freelance_revenue + premium_revenue +
+            business_revenue + credential_revenue
+        )
+
+        # Distribution
+        platform_share = total_revenue * self.platform_revenue_share
+        user_pool = total_revenue * (1 - self.platform_revenue_share)
+
+        avg_per_user = user_pool / scenario.monthly_active_users if scenario.monthly_active_users > 0 else 0
+        median_per_user = avg_per_user * 0.4  # Simplified Pareto distribution
+
+        # Viability Assessment
+        monthly_profit = platform_share - self.fixed_costs_monthly
+        is_viable = avg_per_user >= 10.0 and monthly_profit >= 0
+
+        months_to_profitability = 999
+        if monthly_profit < 0:
+            current_revenue = total_revenue
+            for month in range(1, 37):
+                current_revenue *= 1.20  # 20% growth
+                current_profit = (current_revenue * self.platform_revenue_share) - self.fixed_costs_monthly
+                if current_profit >= 0:
+                    months_to_profitability = month
+                    break
+        else:
+            months_to_profitability = 0
+
+        runway_months = (1_000_000 / abs(monthly_profit)) if monthly_profit < 0 else 999
+
+        return EconomicProjection(
+            scenario_name=scenario.name,
+            ad_revenue_monthly=ad_revenue,
+            freelance_commission_monthly=freelance_revenue,
+            premium_subscription_revenue=premium_revenue,
+            business_subscription_revenue=business_revenue,
+            credential_revenue_monthly=credential_revenue,
+            total_revenue_monthly=total_revenue,
+            platform_share=platform_share,
+            user_pool=user_pool,
+            avg_per_user_monthly=avg_per_user,
+            median_per_user_monthly=median_per_user,
+            is_viable=is_viable,
+            months_to_profitability=months_to_profitability,
+            runway_months=runway_months
+        )
+
+    def run_scenario_analysis(self) -> Dict[str, EconomicProjection]:
         """
-        Calculate how much each user should receive for this period.
+        Run multiple scenarios: best case, expected, worst case.
         """
-        user_earnings: Dict[str, float] = {}
-
-        for stream, revenue in revenue_by_stream.items():
-            allocation = self.allocations.get(stream)
-            if not allocation: continue
-
-            # Direct contributor percentage
-            direct_share = revenue * allocation.direct_contributor_percentage
-            direct_earnings = self._distribute_direct_contributions(stream, direct_share, period)
-
-            # Indirect contributor pool
-            indirect_share = revenue * allocation.indirect_contributor_pool_percentage
-            indirect_earnings = self._distribute_indirect_contributions(indirect_share, all_users, period)
-
-            # Combine earnings
-            for user_id, amount in {**direct_earnings, **indirect_earnings}.items():
-                user_earnings[user_id] = user_earnings.get(user_id, 0.0) + amount
-
-        return user_earnings
-
-    def _distribute_direct_contributions(
-        self, stream: RevenueStream, pool: float, period: str
-    ) -> Dict[str, float]:
-        # Placeholder for complex logic
-        return {}
-
-    def _distribute_indirect_contributions(
-        self, pool: float, all_users: List[InternalProfile], period: str
-    ) -> Dict[str, float]:
-        """
-        Distribute indirect contribution pool based on contribution scores.
-        """
-        contribution_scores = {
-            user.user_id: self.contribution_calculator.calculate_score(user, period)
-            for user in all_users
+        scenarios = {
+            'worst_case': EconomicScenario(
+                name="Worst Case", num_users=1_000, monthly_active_users=300, ad_cpm=1.0,
+                ad_views_per_active_user_monthly=50, ad_opt_out_rate=0.6, avg_monthly_freelance_transactions=20,
+                avg_transaction_value=100, platform_commission_rate=0.15, premium_subscription_rate=0.02,
+                premium_monthly_price=10, business_subscribers=2, business_subscription_monthly=200,
+                credential_verifications_monthly=10, verification_fee=25
+            ),
+            'expected_case': EconomicScenario(
+                name="Expected Case", num_users=10_000, monthly_active_users=3_500, ad_cpm=3.0,
+                ad_views_per_active_user_monthly=100, ad_opt_out_rate=0.4, avg_monthly_freelance_transactions=300,
+                avg_transaction_value=150, platform_commission_rate=0.15, premium_subscription_rate=0.05,
+                premium_monthly_price=15, business_subscribers=25, business_subscription_monthly=500,
+                credential_verifications_monthly=100, verification_fee=30
+            ),
+            'best_case': EconomicScenario(
+                name="Best Case", num_users=100_000, monthly_active_users=40_000, ad_cpm=8.0,
+                ad_views_per_active_user_monthly=150, ad_opt_out_rate=0.3, avg_monthly_freelance_transactions=5000,
+                avg_transaction_value=200, platform_commission_rate=0.15, premium_subscription_rate=0.08,
+                premium_monthly_price=20, business_subscribers=300, business_subscription_monthly=1000,
+                credential_verifications_monthly=1500, verification_fee=35
+            )
         }
 
-        total_contribution = sum(s.total_contribution for s in contribution_scores.values())
-        if total_contribution == 0: return {}
+        return {name: self.project_economics(scenario) for name, scenario in scenarios.items()}
 
-        earnings: Dict[str, float] = {}
-        for user_id, score in contribution_scores.items():
-            share = (score.total_contribution / total_contribution) * pool
-            earnings[user_id] = share
+    def print_scenario_analysis(self):
+        """Pretty print scenario analysis results"""
+        projections = self.run_scenario_analysis()
 
-        return earnings
+        print("\\n" + "="*80)
+        print("ECONOMIC SCENARIO ANALYSIS")
+        print("="*80)
+
+        for proj in projections.values():
+            print(f"\\n{proj.scenario_name.upper()}")
+            print("-" * 80)
+            print(f"  TOTAL REVENUE: ${proj.total_revenue_monthly:12,.2f}")
+            print(f"  Platform Share: ${proj.platform_share:12,.2f}")
+            print(f"  User Pool:      ${proj.user_pool:12,.2f}")
+            print(f"  Avg per user:   ${proj.avg_per_user_monthly:12,.2f}/month")
+            print(f"  Is Viable:      {proj.is_viable}")
+            print(f"  Months to Profit: {proj.months_to_profitability}")
+            print()
