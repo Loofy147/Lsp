@@ -1,79 +1,95 @@
 
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime
 from lsp_core.models import (
-    ActivityEvent,
     InternalProfile,
-    CapabilityDimension,
-    LanguageCapabilityDimension,
-    LanguageAssessmentActivity,
-    CapabilityEstimate,
-    UserPreferences,
+    ActivityEvent,
     ActivityContext,
     ActivityDomain,
+    CapabilityDimension,
+    BehaviorPattern,
+    LearningCurve,
+    RewardConcept,
+    CapabilityEstimate
 )
 from lsp_core.algorithm import (
-    FraudDetector,
-    LanguageCapabilityAssessor,
-    PatternValidator,
-    WellbeingMonitor,
-    PatternDiscoveryEngine,
+    MultiDimensionalAssessor,
+    PatternDiscoveryEngine
 )
 
-class TestAlgorithms(unittest.TestCase):
+class TestMultiDimensionalAssessor(unittest.TestCase):
 
     def setUp(self):
-        """Set up common test data."""
-        self.user = InternalProfile(
-            user_id="test_user",
-            preferences=UserPreferences(display_name="Test"),
-            capability_scores={
-                CapabilityDimension.CREATIVITY: CapabilityEstimate(mean=0.8, variance=0.1, confidence=0.9)
-            }
+        self.assessor = MultiDimensionalAssessor(dimensions=list(CapabilityDimension))
+        self.profile = InternalProfile(user_id="test_user")
+
+    def test_assessment_from_skill_game(self):
+        """Test that a skill game activity updates the correct capabilities."""
+        event = ActivityEvent(
+            event_id="evt1", user_id="test_user", timestamp=datetime.now(),
+            domain=ActivityDomain.SKILL_GAMES, activity_type="puzzle",
+            action_data={}, context=ActivityContext(time_of_day="evening", day_of_week="saturday", device_type="mobile", location_type="home", previous_activities=[], time_since_last_activity=0, current_goals=[], active_learning_paths=[], recent_achievements=[], collaborative=False, influenced_by_peers=False),
+            performance_metrics={'score': 80, 'strategy_score': 0.9},
+            capability_signals={}, session_id="sess1", sequence_position=1,
+            engagement_level=0.9, frustration_indicators=[], flow_state_indicators=["focus"]
         )
-        self.user.activity_history = [
-            ActivityEvent(
-                event_id=f"event_{i}",
-                user_id="test_user",
-                timestamp=datetime.now() - timedelta(days=i),
-                domain=ActivityDomain.CREATIVE_WORK,
-                activity_type="writing",
-                action_data={},
-                context=ActivityContext(time_of_day="morning", day_of_week="monday", device_type="desktop", location_type="home"),
-                performance_metrics={},
-                capability_signals={},
-                session_id="session1",
-                sequence_position=i,
-                engagement_level=0.8
-            ) for i in range(10)
+
+        updated_scores = self.assessor.assess_from_activity(
+            activity=event,
+            performance_signals=event.performance_metrics,
+            dimensions_assessed=[CapabilityDimension.PATTERN_RECOGNITION, CapabilityDimension.ANALYTICAL_THINKING]
+        )
+
+        self.assertGreater(updated_scores[CapabilityDimension.PATTERN_RECOGNITION], 0.5)
+        self.assertGreater(updated_scores[CapabilityDimension.ANALYTICAL_THINKING], 0.5)
+        self.assertNotIn(CapabilityDimension.CREATIVITY, updated_scores)
+
+    def test_assessment_from_freelance_project(self):
+        """Test that a freelance project activity updates the correct capabilities."""
+        event = ActivityEvent(
+            event_id="evt2", user_id="test_user", timestamp=datetime.now(),
+            domain=ActivityDomain.FREELANCE_PROJECTS, activity_type="translation",
+            action_data={}, context=ActivityContext(time_of_day="morning", day_of_week="monday", device_type="desktop", location_type="work", previous_activities=[], time_since_last_activity=0, current_goals=[], active_learning_paths=[], recent_achievements=[], collaborative=False, influenced_by_peers=False),
+            performance_metrics={'quality_rating': 4.5, 'on_time_delivery': 1.0},
+            capability_signals={}, session_id="sess2", sequence_position=1,
+            engagement_level=0.8, frustration_indicators=[], flow_state_indicators=[]
+        )
+
+        updated_scores = self.assessor.assess_from_activity(
+            activity=event,
+            performance_signals=event.performance_metrics,
+            dimensions_assessed=[CapabilityDimension.DOMAIN_DEPTH, CapabilityDimension.RELIABILITY]
+        )
+
+        self.assertGreater(updated_scores[CapabilityDimension.DOMAIN_DEPTH], 0.5)
+        self.assertGreater(updated_scores[CapabilityDimension.RELIABILITY], 0.5)
+        self.assertNotIn(CapabilityDimension.LEARNING_SPEED, updated_scores)
+
+class TestPatternDiscoveryEngine(unittest.TestCase):
+
+    def setUp(self):
+        self.engine = PatternDiscoveryEngine()
+        self.user_population = [
+            InternalProfile(user_id="user1", capability_scores={CapabilityDimension.CREATIVITY: CapabilityEstimate(mean=0.8, variance=0.1, confidence=0.8), CapabilityDimension.ANALYTICAL_THINKING: CapabilityEstimate(mean=0.3, variance=0.1, confidence=0.8)}),
+            InternalProfile(user_id="user2", capability_scores={CapabilityDimension.CREATIVITY: CapabilityEstimate(mean=0.85, variance=0.1, confidence=0.8), CapabilityDimension.ANALYTICAL_THINKING: CapabilityEstimate(mean=0.25, variance=0.1, confidence=0.8)}),
+            InternalProfile(user_id="user3", capability_scores={CapabilityDimension.CREATIVITY: CapabilityEstimate(mean=0.3, variance=0.1, confidence=0.8), CapabilityDimension.ANALYTICAL_THINKING: CapabilityEstimate(mean=0.9, variance=0.1, confidence=0.8)}),
+            InternalProfile(user_id="user4", capability_scores={CapabilityDimension.CREATIVITY: CapabilityEstimate(mean=0.25, variance=0.1, confidence=0.8), CapabilityDimension.ANALYTICAL_THINKING: CapabilityEstimate(mean=0.95, variance=0.1, confidence=0.8)}),
+            InternalProfile(user_id="user5", capability_scores={CapabilityDimension.LEARNING_SPEED: CapabilityEstimate(mean=0.9, variance=0.1, confidence=0.8), CapabilityDimension.PERSISTENCE: CapabilityEstimate(mean=0.8, variance=0.1, confidence=0.8)}),
+            InternalProfile(user_id="user6", capability_scores={CapabilityDimension.LEARNING_SPEED: CapabilityEstimate(mean=0.95, variance=0.1, confidence=0.8), CapabilityDimension.PERSISTENCE: CapabilityEstimate(mean=0.85, variance=0.1, confidence=0.8)}),
         ]
 
-    def test_wellbeing_monitor(self):
-        """Test the WellbeingMonitor for detecting excessive use."""
-        monitor = WellbeingMonitor()
+    def test_discover_patterns(self):
+        """Test that the engine discovers meaningful patterns in a user population."""
+        patterns = self.engine.discover_patterns(self.user_population)
 
-        # Simulate a burst of activity within a few hours
-        now = datetime.now()
-        for i in range(20): # 20 events, 15 minutes apart = 5 hours
-            self.user.activity_history.append(ActivityEvent(
-                event_id=f"event_burst_{i}", user_id="test_user",
-                timestamp=now - timedelta(minutes=15 * (20-i)),
-                domain=ActivityDomain.CREATIVE_WORK, activity_type="writing", action_data={},
-                context=ActivityContext(time_of_day="night", day_of_week="tuesday", device_type="desktop", location_type="home"),
-                performance_metrics={}, capability_signals={}, session_id="session3",
-                sequence_position=i, engagement_level=0.9
-            ))
+        self.assertIsNotNone(patterns)
+        self.assertGreater(len(patterns), 0)
 
-        assessment = monitor.assess_wellbeing(self.user)
-        self.assertTrue(any(c.concern_type == "excessive_time" for c in assessment.concerns))
+        creative_pattern_found = any(p.capability_profile.get(CapabilityDimension.CREATIVITY, 0) > 0.7 for p in patterns)
+        analytical_pattern_found = any(p.capability_profile.get(CapabilityDimension.ANALYTICAL_THINKING, 0) > 0.7 for p in patterns)
 
-    def test_pattern_discovery(self):
-        """Test that the PatternDiscoveryEngine can generate patterns."""
-        engine = PatternDiscoveryEngine(n_clusters=1)
-        users = [self.user]
-        patterns = engine.discover_patterns(users)
-        self.assertEqual(len(patterns), 1)
-        self.assertIn("strong in creativity", patterns[0].description)
+        self.assertTrue(creative_pattern_found, "A creative-dominant pattern was not found.")
+        self.assertTrue(analytical_pattern_found, "An analytical-dominant pattern was not found.")
 
 if __name__ == '__main__':
     unittest.main()

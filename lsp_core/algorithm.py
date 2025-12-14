@@ -616,20 +616,21 @@ class PatternDiscoveryEngine:
         avg_capabilities = defaultdict(float)
         for user in users:
             for dim, estimate in user.capability_scores.items():
-                avg_capabilities[dim.value] += estimate.mean
+                avg_capabilities[dim] += estimate.mean
 
         if avg_capabilities:
             dominant_capability = max(avg_capabilities, key=avg_capabilities.get)
-            description = f"Users who are strong in {dominant_capability}"
+            description = f"Users who are strong in {dominant_capability.value}"
         else:
             description = "General activity pattern"
+            dominant_capability = None
 
         return BehaviorPattern(
             pattern_id=f"cluster_{cluster_id}",
             pattern_name=f"Pattern {cluster_id}",
             description=description,
             characteristic_behaviors=[],
-            capability_profile={},
+            capability_profile={dominant_capability: avg_capabilities[dominant_capability] / len(users)} if dominant_capability else {},
             temporal_signature={},
             strength=0.0,
             consistency=0.0,

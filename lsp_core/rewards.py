@@ -5,7 +5,7 @@ LSP Reward Synthesizer
 - Based on Self-Determination Theory (SDT) to foster intrinsic motivation.
 """
 
-from .models import BehaviorPattern, RewardConcept, CapabilityDimension
+from .models import BehaviorPattern, RewardConcept, CapabilityDimension, InternalProfile
 import random
 
 class RewardSynthesizer:
@@ -100,3 +100,22 @@ class RewardSynthesizer:
             iterations=1,
             user_feedback_score=0.0
         )
+
+class EligibilityDeterminer:
+    """
+    Determines if a user is eligible for rewards based on behavior patterns.
+    """
+
+    def is_eligible_for_pattern(
+        self,
+        user: InternalProfile,
+        pattern: BehaviorPattern
+    ) -> bool:
+        """
+        Checks if a user's capabilities meet the requirements of a pattern.
+        """
+        for dim, required_score in pattern.capability_profile.items():
+            user_capability = user.capability_scores.get(dim)
+            if not user_capability or user_capability.mean < required_score:
+                return False
+        return True
