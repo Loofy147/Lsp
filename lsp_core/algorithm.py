@@ -21,6 +21,7 @@ from .models import (
     FraudSignal,
 )
 from typing import Dict, List, Optional, Set, Tuple, Any
+from enum import Enum
 from datetime import datetime, timedelta
 from collections import defaultdict
 import numpy as np
@@ -258,64 +259,53 @@ class FraudDetector:
 
 class MultiDimensionalAssessor:
     """
-    Placeholder for a generic capability assessor.
-    The LanguageCapabilityAssessor is a concrete implementation of this concept.
-    """
-    pass
-
-class LanguageCapabilityAssessor:
-    """
-    Complete, production-ready capability assessment for language learning.
+    A generic, configurable capability assessor that uses Bayesian updating
+    to estimate user capabilities from activity performance.
     """
 
-    def __init__(self, target_language: str):
-        self.target_language = target_language
-        self.capability_estimates: Dict[LanguageCapabilityDimension, CapabilityEstimate] = {
+    def __init__(self, dimensions: List[Enum]):
+        self.dimensions = dimensions
+        self.capability_estimates: Dict[Enum, CapabilityEstimate] = {
             dim: CapabilityEstimate(mean=0.3, variance=0.2, confidence=0.1)
-            for dim in LanguageCapabilityDimension
+            for dim in self.dimensions
         }
 
     def assess_from_activity(
         self,
-        activity: LanguageAssessmentActivity,
-        user_responses: List[Dict[str, Any]]
-    ) -> Dict[LanguageCapabilityDimension, float]:
-        performance = self._calculate_performance(user_responses)
+        activity: Any, # Using Any to be generic, could be a protocol
+        performance_signals: Dict[str, float],
+        dimensions_assessed: List[Enum]
+    ) -> Dict[Enum, float]:
+        """
+        Updates capability estimates based on performance in an activity.
+
+        Args:
+            activity: The activity object, containing context like difficulty.
+            performance_signals: A dict of performance metrics (e.g., {'accuracy': 0.8, 'speed': 0.9}).
+            dimensions_assessed: A list of the capability dimensions this activity targets.
+
+        Returns:
+            A dictionary of the updated capability mean scores.
+        """
         updated_estimates = {}
 
-        for dimension in activity.dimensions_assessed:
-            signal = self._extract_dimension_signal(dimension, performance, activity.difficulty_level)
-            updated = self._bayesian_update(self.capability_estimates[dimension], signal, activity.difficulty_level)
+        for dimension in dimensions_assessed:
+            # This logic assumes a simple signal extraction; could be made more configurable
+            signal = self._extract_signal(performance_signals)
+            difficulty = getattr(activity, 'difficulty_level', 0.5)
+
+            updated = self._bayesian_update(self.capability_estimates[dimension], signal, difficulty)
             self.capability_estimates[dimension] = updated
             updated_estimates[dimension] = updated.mean
 
         return updated_estimates
 
-    def _calculate_performance(self, user_responses: List[Dict[str, Any]]) -> Dict[str, float]:
-        if not user_responses:
-            return {}
-
-        accuracy = sum(1 for r in user_responses if r.get('correct', False)) / len(user_responses)
-        total_time = sum(r.get('time_taken', 0) for r in user_responses)
-        speed = len(user_responses) / (total_time / 60) if total_time > 0 else 0
-
-        return {'accuracy': accuracy, 'speed': speed}
-
-    def _extract_dimension_signal(
-        self,
-        dimension: LanguageCapabilityDimension,
-        performance: Dict[str, float],
-        difficulty: float
-    ) -> float:
-        accuracy = performance.get('accuracy', 0.5)
-        signal = accuracy
-
-        if accuracy > 0.8:
-            signal += (difficulty * 0.2)
-        elif accuracy < 0.4:
-            signal -= ((1 - difficulty) * 0.2)
-
-        return max(0.0, min(1.0, signal))
+    def _extract_signal(self, performance: Dict[str, float]) -> float:
+        """A simple, generic way to get a single signal from performance data."""
+        if not performance:
+            return 0.5
+        # Default to averaging all performance metrics
+        return np.mean(list(performance.values()))
 
     def _bayesian_update(
         self,
@@ -323,16 +313,73 @@ class LanguageCapabilityAssessor:
         signal: float,
         difficulty: float
     ) -> CapabilityEstimate:
+        """Updates a prior belief with a new signal."""
+        # Confidence in the signal is influenced by activity difficulty
         signal_confidence = 0.3 + (difficulty * 0.4)
+
         prior_weight = prior.confidence
         signal_weight = signal_confidence
         total_weight = prior_weight + signal_weight
 
+        if total_weight == 0:
+            return prior
+
+        # Weighted average for the new mean
         new_mean = ((prior.mean * prior_weight + signal * signal_weight) / total_weight)
+
+        # Reduce variance and increase confidence
         new_variance = prior.variance * (1 - signal_confidence * 0.1)
         new_confidence = min(prior.confidence + signal_confidence * 0.1, 0.95)
 
         return CapabilityEstimate(mean=new_mean, variance=new_variance, confidence=new_confidence)
+
+class LanguageCapabilityAssessor(MultiDimensionalAssessor):
+    """
+    A specialized assessor for language learning that builds upon the generic
+    MultiDimensionalAssessor, providing domain-specific logic for signal extraction.
+    """
+
+    def __init__(self, target_language: str):
+        super().__init__(dimensions=list(LanguageCapabilityDimension))
+        self.target_language = target_language
+
+    def assess(
+        self,
+        activity: LanguageAssessmentActivity,
+        user_responses: List[Dict[str, Any]]
+    ) -> Dict[LanguageCapabilityDimension, float]:
+        """
+        Specialized assessment method for language activities. It calculates
+        performance and then uses the generic assessment logic from the parent class.
+        """
+        performance = self._calculate_performance(user_responses)
+
+        # Call the generic parent method with the extracted signals
+        return super().assess_from_activity(
+            activity=activity,
+            performance_signals=performance,
+            dimensions_assessed=activity.dimensions_assessed
+        )
+
+    def _calculate_performance(self, user_responses: List[Dict[str, Any]]) -> Dict[str, float]:
+        """Calculates accuracy and speed from user responses."""
+        if not user_responses:
+            return {'accuracy': 0.0, 'speed': 0.0}
+
+        accuracy = sum(1 for r in user_responses if r.get('correct', False)) / len(user_responses)
+        total_time = sum(r.get('time_taken', 0) for r in user_responses)
+
+        # Avoid division by zero for speed
+        speed = (len(user_responses) / (total_time / 60)) if total_time > 0 else 0
+
+        return {'accuracy': accuracy, 'speed': speed}
+
+    def _extract_signal(self, performance: Dict[str, float]) -> float:
+        """
+        Overrides the generic signal extraction to use a domain-specific rule:
+        accuracy is the primary signal for language learning.
+        """
+        return performance.get('accuracy', 0.5)
 
 # ============================================================================
 # 3. PATTERN VALIDATION
@@ -504,23 +551,62 @@ class PatternDiscoveryEngine:
 
     def _create_behavior_vectors(self, users: List[InternalProfile]) -> np.ndarray:
         """
-        Creates a numerical vector representation of each user's behavior.
+        Creates a richer numerical vector representation of each user's behavior,
+        including capabilities, engagement, and activity metrics.
         """
-        # A simple vectorization: average scores for key capability dimensions
-        dimensions = [
-            CapabilityDimension.LEARNING_SPEED,
-            CapabilityDimension.CREATIVITY,
-            CapabilityDimension.PERSISTENCE,
-        ]
+
+        # Use all available capability dimensions for a comprehensive profile
+        dimensions = list(CapabilityDimension)
+
         vectors = []
         for user in users:
-            vector = [
+            # 1. Capability scores
+            capability_vector = [
                 user.capability_scores.get(dim, CapabilityEstimate(mean=0.0, variance=0.0, confidence=0.0)).mean
                 for dim in dimensions
             ]
-            vectors.append(vector)
 
-        return np.array(vectors)
+            # 2. Activity and engagement metrics
+            if user.activity_history:
+                sorted_history = sorted(user.activity_history, key=lambda x: x.timestamp)
+
+                # Engagement
+                avg_engagement = np.mean([a.engagement_level for a in sorted_history])
+
+                # Activity Count
+                activity_count = len(sorted_history)
+
+                # Recency
+                last_activity_date = sorted_history[-1].timestamp
+                days_since_last_activity = (datetime.now() - last_activity_date).days
+
+                # Frequency
+                first_activity_date = sorted_history[0].timestamp
+                total_duration_days = (last_activity_date - first_activity_date).days
+                activities_per_day = activity_count / (total_duration_days + 1)  # Add 1 to avoid division by zero
+
+            else:
+                avg_engagement = 0.0
+                activity_count = 0.0
+                days_since_last_activity = 365.0  # High value for inactive users
+                activities_per_day = 0.0
+
+            # 3. Combine into a single feature vector
+            feature_vector = capability_vector + [
+                avg_engagement,
+                activity_count,
+                days_since_last_activity,
+                activities_per_day
+            ]
+            vectors.append(feature_vector)
+
+        # Normalize the vectors for clustering
+        vectors_array = np.array(vectors)
+        if vectors_array.shape[0] > 0:
+            # Add epsilon for stability
+            vectors_array = (vectors_array - vectors_array.mean(axis=0)) / (vectors_array.std(axis=0) + 1e-6)
+
+        return vectors_array
 
     def _extract_pattern_from_cluster(self, cluster_id: int, users: List[InternalProfile]) -> BehaviorPattern:
         """
